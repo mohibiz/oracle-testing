@@ -1,0 +1,505 @@
+PROMPT 'Installing reconciliation objects'
+
+/*Write more comments in this section*/
+
+define cdbusername='&&1';
+define cdbpassword='&&2' ;
+define cdbjdbcurl ='''&&3''';
+define sourceoracledbusername='&&4';
+define sourceoracledbpassword='&&5' ;
+define sourceoracledbjdbcurl ='''&&6''';
+
+DEFINE logpath=&&7;
+DEFINE logfilename=&&8;
+SPOOL &&logpath/&&logfilename
+
+SET echo on;
+SET SERVEROUTPUT ON ;
+SET timing on;
+
+--Create DBLink if it does not exist
+DROP DATABASE LINK DBLinksourceoracledb;
+DROP DATABASE LINK DBLinkCDB;
+CREATE DATABASE LINK DBLinkCDB CONNECT TO &&cdbusername	IDENTIFIED BY &&cdbpassword	USING &&cdbjdbcurl;   
+CREATE DATABASE LINK DBLinksourceoracledb CONNECT TO &&sourceoracledbusername	IDENTIFIED BY &&sourceoracledbpassword	USING &&sourceoracledbjdbcurl;   
+
+
+CREATE SEQUENCE SEQ_CONTROLTABLE MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;
+CREATE SEQUENCE SEQ_EXECUTIONLOG MINVALUE 90000 START WITH 90000 INCREMENT BY 1 CACHE 20;
+
+DROP TABLE AR_EXECUTION_REQUEST CASCADE CONSTRAINTS;
+CREATE TABLE AR_EXECUTION_REQUEST 
+(	
+    EXECUTION_SK NUMBER,
+    EXESTRUCTURECRECON VARCHAR2(30),
+    EXEROWCOUNTCRECON VARCHAR2(30),
+    EXEALLCOLUMNCRECON VARCHAR2(30),
+    sourceoracledbNETSERVICENAME VARCHAR2(30),
+    targetoracledbNETSERVICENAME VARCHAR2(30),
+    CDBNETSERVICENAME VARCHAR2(30),
+    CREATED_DTE DATE,
+    CREATED_BY VARCHAR2(30),
+    REQUEST_SUBMIT_DTE DATE,
+    REQUEST_END_DTE DATE,
+    REQUEST_STATUS VARCHAR2(30),
+    COMMENTS VARCHAR(4000)
+);
+
+DROP TABLE AR_EXECUTION_LOG CASCADE CONSTRAINTS;
+CREATE TABLE AR_EXECUTION_LOG 
+(	
+    LOG_SK NUMBER,
+    EXECUTION_BK NUMBER,
+    PROCEDURE_NME VARCHAR2(30),
+    EXECUTION_STATUS VARCHAR2(30),
+    EXECUTION_ERROR VARCHAR2(4000),
+    RECON_START_DTE DATE,
+    RECON_END_DTE DATE,
+    COMMENTS VARCHAR(4000)
+);
+
+DROP TABLE AR_RECONCONTROLTABLECSV CASCADE CONSTRAINTS;
+CREATE TABLE AR_RECONCONTROLTABLECSV 
+(	
+    RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	sourceoracledbSCHEMA VARCHAR2(30), 
+	sourceoracledbTABLENAME VARCHAR2(30), 
+	CDBSCHEMA VARCHAR2(30), 
+	CDBTABLENAME VARCHAR2(30), 
+    targetoracledbSCHEMA VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+    sasLIB VARCHAR2(100),
+	sasDATASETNAME VARCHAR2(30), 
+	TABLEKEYS VARCHAR2(100),
+    DATAVAR VARCHAR2(4000),
+    DATEGREATERTHAN VARCHAR2(4000),
+    DATELESSTHAN VARCHAR2(4000),
+	DATENOTIN VARCHAR2(4000),
+    EXTRACONDITION VARCHAR2(4000),
+    EXCLUDCOLUMNLIST VARCHAR2(4000),
+    targetoracledbRECON_IND CHAR(1),
+    sasRECON_IND CHAR(1),
+    COMMENTS VARCHAR(4000)
+
+);
+
+DROP TABLE AR_CONTROLTABLE CASCADE CONSTRAINTS;
+CREATE TABLE AR_CONTROLTABLE 
+(	
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	sourceoracledbSCHEMA VARCHAR2(30), 
+	sourceoracledbTABLENAME VARCHAR2(30), 
+	CDBSCHEMA VARCHAR2(30), 
+	CDBTABLENAME VARCHAR2(30), 
+    targetoracledbSCHEMA VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+    sasLIB VARCHAR2(100),
+	sasDATASETNAME VARCHAR2(30), 
+	TABLEKEYS VARCHAR2(100),
+    DATAVAR VARCHAR2(4000),
+    DATEGREATERTHAN VARCHAR2(4000),
+    DATELESSTHAN VARCHAR2(4000),
+	DATENOTIN VARCHAR2(4000),
+    EXTRACONDITION  VARCHAR2(4000),
+    EXCLUDCOLUMNLIST VARCHAR2(4000),
+    targetoracledbRECON_IND CHAR(1),
+    sasRECON_IND CHAR(1),
+    COMMENTS VARCHAR(4000),
+    CONSTRAINT CONTROLTABLE_PK PRIMARY KEY (CONTROLTABLE_SK)
+
+);
+
+-------------------------------------------------------------DDL for All column Comparison
+-------------------------------------------------------------
+
+DROP TABLE AR_ALLCOLUMNRESULTS CASCADE CONSTRAINTS;
+CREATE TABLE AR_ALLCOLUMNRESULTS 
+(	             
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	sourceoracledbTABLENAME VARCHAR2(30), 
+	CDBTABLENAME VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+	sasDATASETNAME VARCHAR2(30), 
+	sourceoracledb_targetoracledb_MISMATCH NUMBER, 
+	sourceoracledb_targetoracledb_DUPLICATES NUMBER, 
+	CDB_targetoracledb_MISMATCH NUMBER,
+    sourceoracledb_sas_MISMATCH NUMBER,
+	INITIATEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDURATION INTERVAL DAY (2) TO SECOND (6), 
+	ERRORDATETIME TIMESTAMP (6), 
+	SELECTSQL VARCHAR2(4000),
+    LOG_SK NUMBER
+);
+
+DROP TABLE AR_ALLCOLUMNERRORS CASCADE CONSTRAINTS;
+CREATE TABLE AR_ALLCOLUMNERRORS 
+(
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+    RECONNAME   VARCHAR2(50),
+    TABLENAME   VARCHAR2(50),
+    MESSAGE     VARCHAR2(4000),
+    LOG_SK NUMBER
+);
+
+DROP TABLE AR_MUTUALCOLUMNS;
+CREATE TABLE AR_MUTUALCOLUMNS
+(    
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER , 
+	COLUMN_NAME VARCHAR2(30) NOT NULL ENABLE, 
+	targetoracledb_DATA_TYPE VARCHAR2(106 ), 
+	TRANSFORMED_CLOUMN VARCHAR2(4000), 
+	targetoracledb_SCHEMA VARCHAR2(30 ) NOT NULL ENABLE, 
+	targetoracledb_COLUMN_ALIAS VARCHAR2(4000), 
+	targetoracledb_COLUMN VARCHAR2(1932), 
+	sourceoracledb_SCHEMA VARCHAR2(6), 
+	sourceoracledb_COLUMN_ALIAS VARCHAR2(4000), 
+	sourceoracledb_COLUMN VARCHAR2(4000), 
+	sourceoracledb_DATA_TYPE VARCHAR2(128), 
+	sas_SCHEMA VARCHAR2(30), 
+	sas_COLUMN VARCHAR2(4000),
+	sas_DATA_TYPE VARCHAR2(30), 
+	COLUMNORDER NUMBER
+);
+
+DROP TABLE AR_MUTUALCOLUMNLIST;
+CREATE TABLE AR_MUTUALCOLUMNLIST 
+(
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	MUTUALCOLUMNLIST CLOB, 
+	TRANSFORMEDCOLUMNLIST CLOB, 
+	sourceoracledbCOLUMNLIST CLOB, 
+	targetoracledbCOLUMNLIST CLOB, 
+	sourceoracledbCOLUMALIASLIST CLOB, 
+	targetoracledbCOLUMNALIASLIST CLOB,
+	sasCOLUMNLIST CLOB
+);
+
+DROP TABLE AR_MUTUALCOLUMNLOBS;
+CREATE TABLE AR_MUTUALCOLUMNLOBS 
+(	CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	COLUMN_NAME VARCHAR2(30 ) NOT NULL ENABLE, 
+	TRANSFORMED_CLOUMN VARCHAR2(4000 ), 
+	targetoracledb_SCHEMA VARCHAR2(30 ) NOT NULL ENABLE, 
+	sourceoracledb_SCHEMA VARCHAR2(6 ), 
+	targetoracledb_COLUMN VARCHAR2(1932 ), 
+	targetoracledb_COLUMN_ALIAS VARCHAR2(4000 ), 
+	sourceoracledb_COLUMN VARCHAR2(4000 ), 
+	sourceoracledb_COLUMN_ALIAS VARCHAR2(4000 ), 
+	COMMA VARCHAR2(2 ), 
+	COLUMNORDER NUMBER, 
+	targetoracledb_DATA_TYPE VARCHAR2(106 ), 
+	sourceoracledb_DATA_TYPE VARCHAR2(128 ), 
+	TRANSFORMED_LOB_CLOUMN VARCHAR2(4000 ), 
+	TRANSFORMED_LOB_CLOUMN_ALIAS VARCHAR2(38 )
+);
+
+DROP TABLE AR_MUTUALCOLUMNLOBLIST ;
+CREATE TABLE AR_MUTUALCOLUMNLOBLIST 
+(	
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	MUTUALCOLUMNLIST CLOB, 
+	TRANSFORMEDCOLUMNLIST CLOB, 
+	sourceoracledbCOLUMNALIASLIST CLOB, 
+	targetoracledbCOLUMNALIASLIST CLOB, 
+	sourceoracledbCOLUMNLIST CLOB, 
+	targetoracledbCOLUMNLIST CLOB, 
+	COMPARELOBCOLUMNLIST CLOB, 
+	LOBRECONCONDITION CLOB
+);
+
+-------------------------------------------------------------DDL for Record Count Comparison
+-------------------------------------------------------------
+DROP TABLE AR_RECORDCOUNTRESULTS CASCADE CONSTRAINTS;
+
+    
+     CREATE TABLE AR_RECORDCOUNTRESULTS --Add primary key later on
+   (	
+     CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+    sourceoracledbTABLENAME VARCHAR2(30), 
+	CDBTABLENAME VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+	sourceoracledbRECORDCOUNT NUMBER, 
+	CDBRECORDCOUNT NUMBER, 
+	targetoracledbRECORDCOUNT NUMBER, 
+	sasDATASETRECORDCOUNT NUMBER,  --targetoracledb_NGCM_SA2_RECORDCOUNT
+	sourceoracledbtargetoracledb_RECORDCOUNTDIFFERENCE NUMBER, 
+    sourceoracledbsas_RECORDCOUNTDIFFERENCE NUMBER, 
+	INITIATEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDURATION INTERVAL DAY (2) TO SECOND (6), 
+	ERRORDATETIME TIMESTAMP (6),
+    LOG_SK NUMBER
+   );
+
+
+DROP TABLE AR_RECORDCOUNTERRORS;
+CREATE TABLE AR_RECORDCOUNTERRORS
+(
+    CONTROLTABLE_SK NUMBER
+,    RECONIDENTIFIER NUMBER 
+,    PROJECTIDENTIFIER NUMBER
+,    PROJECTNAME  VARCHAR2(100)
+,   TABLEIDENTIFIER NUMBER 
+,   TABLESOURCE VARCHAR2(50)
+,   TABLENAME VARCHAR2(50)
+,   MESSAGE VARCHAR2(100)
+,   LOG_SK NUMBER
+);
+
+---Create objects for table structure reconciliation
+DROP TABLE AR_STRUCTURERESULTS CASCADE CONSTRAINTS;
+CREATE TABLE AR_STRUCTURERESULTS 
+(	             
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER, 
+	sourceoracledbTABLENAME VARCHAR2(30), 
+	CDBTABLENAME VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+    sasDATASETNAME VARCHAR2(30), 
+	sourceoracledb_targetoracledb_COLUMN_MISMATCH NUMBER, 
+	sourceoracledb_targetoracledb_DATETYPE_MISMATCH NUMBER, 
+	sourceoracledb_targetoracledb_DATALENGTH_MISMATCH NUMBER,
+	sourceoracledb_targetoracledb_DATA_PREC_MISMATCH NUMBER,
+	CDB_targetoracledb_COLUMN_MISMATCH NUMBER, 
+	CDB_targetoracledb_DATETYPE_MISMATCH NUMBER, 
+	CDB_targetoracledb_DATALENGTH_MISMATCH NUMBER,
+	CDB_targetoracledb_DATA_PREC_MISMATCH NUMBER,
+    sourceoracledb_sas_COLUMN_MISMATCH NUMBER, 
+	sourceoracledb_sas_DATETYPE_MISMATCH NUMBER, 
+	INITIATEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDATETIME TIMESTAMP (6), 
+	COMPLETEDDURATION INTERVAL DAY (2) TO SECOND (6), 
+	ERRORDATETIME TIMESTAMP (6), 
+	SELECTSQL VARCHAR2(4000),
+    LOG_SK NUMBER
+);
+
+
+DROP TABLE AR_STRUCVAL_sourceoracledb;
+CREATE TABLE AR_STRUCVAL_sourceoracledb
+   (	
+     CONTROLTABLE_SK NUMBER,
+	 RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER ,
+	TABLESOURCE VARCHAR2(100), 
+	OWNER VARCHAR2(128), 
+	sourceoracledbTABLENAME VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30), 
+    sasDATASETNAME VARCHAR2(30),
+	COLUMN_NAME VARCHAR2(128), 
+	DATA_TYPE VARCHAR2(128), 
+	DATA_LENGTH NUMBER, 
+	DATA_PRECISION NUMBER
+   );
+   
+DROP TABLE AR_STRUCVAL_CDB;
+CREATE TABLE AR_STRUCVAL_CDB 
+   (	
+    CONTROLTABLE_SK NUMBER,
+    RECONIDENTIFIER NUMBER ,
+    PROJECTIDENTIFIER NUMBER,
+    PROJECTNAME  VARCHAR2(100),
+    TABLEIDENTIFIER NUMBER ,
+	TABLESOURCE VARCHAR2(100), 
+	OWNER VARCHAR2(128), 
+	CDBTableName VARCHAR2(30), 
+	targetoracledbTABLENAME VARCHAR2(30),
+    sasDATASETNAME VARCHAR2(30),
+	COLUMN_NAME VARCHAR2(128), 
+	DATA_TYPE VARCHAR2(128), 
+	DATA_LENGTH NUMBER, 
+	DATA_PRECISION NUMBER
+   );
+
+DROP TABLE AR_STRUCTUREERRORS;
+CREATE TABLE AR_STRUCTUREERRORS
+(
+    CONTROLTABLE_SK NUMBER
+,    RECONIDENTIFIER NUMBER 
+,    PROJECTIDENTIFIER NUMBER
+,    PROJECTNAME  VARCHAR2(100)
+,   TABLEIDENTIFIER NUMBER 
+,   TableSource VARCHAR2(50)
+,   TableName VARCHAR2(50)
+,   Message VARCHAR2(100)
+,   LOG_SK NUMBER
+); 
+ 
+ 
+ DROP TABLE CLEANUPERROS;
+CREATE TABLE CLEANUPERROS
+(
+   TableName VARCHAR2(30)
+   ,sql_stmt  VARCHAR2(4000)
+,   Message VARCHAR2(4000)
+,   log_sk NUMBER
+);
+ --------------------------------------- Utility Objects
+ 
+
+ CREATE OR REPLACE FUNCTION split_String(
+ --This function splits the comma seperated value
+  i_str    IN  VARCHAR2,
+  i_delim  IN  VARCHAR2 DEFAULT ','
+) RETURN SYS.ODCIVARCHAR2LIST DETERMINISTIC
+AS
+  p_result       SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+  p_start        NUMBER(5) := 1;
+  p_end          NUMBER(5);
+  c_len CONSTANT NUMBER(5) := LENGTH( i_str );
+  c_ld  CONSTANT NUMBER(5) := LENGTH( i_delim );
+BEGIN
+  IF c_len > 0 THEN
+    p_end := INSTR( i_str, i_delim, p_start );
+    WHILE p_end > 0 LOOP
+      p_result.EXTEND;
+      p_result( p_result.COUNT ) := SUBSTR( i_str, p_start, p_end - p_start );
+      p_start := p_end + c_ld;
+      p_end := INSTR( i_str, i_delim, p_start );
+    END LOOP;
+    IF p_start <= c_len + 1 THEN
+      p_result.EXTEND;
+      p_result( p_result.COUNT ) := SUBSTR( i_str, p_start, c_len - p_start + 1 );
+    END IF;
+  END IF;
+  RETURN p_result;
+END; 
+/
+CREATE OR REPLACE FUNCTION check_object_exists(
+--This function check if object exits or not ,supports the objects supported by all_objects
+  i_owner  IN  VARCHAR2,
+  i_object_type IN  VARCHAR2 ,
+  i_object_name  IN  VARCHAR2 
+
+) RETURN NUMBER 
+AS
+object_count NUMBER;
+c_length_owner CONSTANT NUMBER(5) := LENGTH( i_owner );
+c_length_object_type CONSTANT NUMBER(5) := LENGTH( i_object_type );
+c_length_object_name  CONSTANT NUMBER(5) := LENGTH( i_object_name );
+BEGIN
+IF ( c_length_owner>0 AND c_length_object_name>0 AND c_length_object_type>0 )
+THEN 
+    SELECT COUNT(*) INTO object_count FROM all_objects
+    WHERE  OWNER=UPPER(i_owner) AND  object_type =UPPER(i_object_type) AND object_name=UPPER(i_object_name);
+    IF object_count<>0 THEN 
+    object_count:=1;
+    ELSE
+    object_count:=0;
+    END IF;
+
+END IF;
+    RETURN object_count;
+        EXCEPTION 
+          WHEN OTHERS then
+          dbms_output.put_line('Error in  check_object_exists'||SUBSTR(DBMS_UTILITY.FORMAT_ERROR_STACK, 1, 4000) );
+END
+;
+/
+ CREATE OR REPLACE FUNCTION get_table_rowcount
+        (v_table_name IN VARCHAR2 ,v_owner_name IN VARCHAR2 )
+        RETURN NUMBER
+        AS
+        record_count NUMBER;
+        object_exist NUMBER;
+        i_owner ALL_OBJECTS.owner%TYPE;
+        i_object_type all_objects.object_type%TYPE;
+        i_object_name all_objects.object_name%TYPE;
+        sql_stmt VARCHAR2(2000) ;
+    BEGIN
+          i_object_type:='TABLE';
+          i_owner:=v_owner_name ; 
+          i_object_name :=v_table_name;
+          object_exist:= check_object_exists(i_owner,i_object_type ,i_object_name );
+          dbms_output.put_line(i_owner||i_object_type ||i_object_name);
+          IF object_exist=0
+          THEN 
+          dbms_output.put_line('setting null');
+          record_count:=-999;
+          ELSE 
+           sql_stmt:='SELECT COUNT(*) FROM '||i_object_name ;
+          dbms_output.put_line(sql_stmt);
+          EXECUTE IMMEDIATE sql_stmt INTO record_count;
+          END IF;
+          RETURN record_count;
+          EXCEPTION 
+          WHEN OTHERS then
+          dbms_output.put_line('Error in get_table_rowcount'||SUBSTR(DBMS_UTILITY.FORMAT_ERROR_STACK, 1, 4000) );
+    END;
+
+/
+
+CREATE OR REPLACE FUNCTION check_object_validity(
+--This function check if object exits or not ,supports the objects supported by all_objects
+  i_owner  IN  VARCHAR2,
+  i_object_type IN  VARCHAR2 ,
+  i_object_name  IN  VARCHAR2 
+
+) RETURN NUMBER 
+AS
+object_count NUMBER;
+c_length_owner CONSTANT NUMBER(5) := LENGTH( i_owner );
+c_length_object_type CONSTANT NUMBER(5) := LENGTH( i_object_type );
+c_length_object_name  CONSTANT NUMBER(5) := LENGTH( i_object_name );
+BEGIN
+IF ( c_length_owner>0 AND c_length_object_name>0 AND c_length_object_type>0 )
+THEN 
+    SELECT COUNT(*) INTO object_count FROM all_objects
+    WHERE  OWNER=UPPER(i_owner) AND  object_type =UPPER(i_object_type) AND object_name=UPPER(i_object_name) 
+    and status = 'VALID';
+    IF object_count<>0 THEN 
+    object_count:=1;
+    ELSE
+    object_count:=0;
+    END IF;
+
+END IF;
+    RETURN object_count;
+        EXCEPTION 
+          WHEN OTHERS then
+          dbms_output.put_line('Error in check_object_validity '||SUBSTR(DBMS_UTILITY.FORMAT_ERROR_STACK, 1, 4000) );
+END
+;
+/
+exit

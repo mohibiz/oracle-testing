@@ -1,0 +1,49 @@
+--execute row count comparison 
+DEFINE logpath=&&1;
+DEFINE logfilename=&&2;
+    define executetargetoracledbrecon='''&&3'''; 
+    define executesasrecon='''&&4'''; 
+SPOOL &&logpath/&&logfilename
+
+SET echo on;
+SET SERVEROUTPUT ON ;
+SET timing on;
+
+prompt "renaming temporary targetoracledb table created from sasdataset"
+
+DECLARE
+  LOG_SK NUMBER;
+  INVALID_PROCEDURE EXCEPTION;
+  EXECUTION_ID NUMBER DEFAULT -1;
+    VAR_EXECUTEtargetoracledbRECON VARCHAR(2);
+    VAR_EXECUTEsasRECON VARCHAR(2);
+    VAR_RECONTARGET VARCHAR2(30) DEFAULT 'NOT DEFINED';
+  
+BEGIN
+      LOG_SK:=SEQ_EXECUTIONLOG.NEXTVAL;
+	VAR_EXECUTEtargetoracledbRECON:=&&executetargetoracledbrecon;
+    VAR_EXECUTEsasRECON:=&&executesasrecon;   
+    	IF (VAR_EXECUTEtargetoracledbRECON ='Y' AND VAR_EXECUTEsasRECON ='N' ) THEN VAR_RECONTARGET:= 'sourceoracledb-targetoracledb';
+	ELSIF (VAR_EXECUTEtargetoracledbRECON ='N' AND VAR_EXECUTEsasRECON ='Y ' )  THEN VAR_RECONTARGET:= 'sourceoracledb-sas';
+    ELSIF (VAR_EXECUTEtargetoracledbRECON ='Y' AND VAR_EXECUTEsasRECON ='Y ' )  THEN VAR_RECONTARGET:= 'sourceoracledb-targetoracledb And sourceoracledb-sas';
+	ELSE  VAR_RECONTARGET:= 'NA';
+	END IF;
+    
+      SELECT EXECUTION_ID INTO EXECUTION_ID FROM AR_EXECUTION_CONTROLER;
+      
+     INSERT INTO AR_EXECUTION_LOG--(LOG_SK,EXECUTION_BK,PROCEDURE_NME,EXECUTION_STATUS,EXECUTION_ERROR,RECON_START_DTE, RECON_END_DTE, COMMENTS)
+     VALUES(LOG_SK ,EXECUTION_ID,'PROC_RENAMEsasTEMPDATASET','RUNNING',' ',SYSDATE, SYSDATE, VAR_RECONTARGET);
+       
+    PROC_RENAMEsasTEMPDATASET(VAR_EXECUTEtargetoracledbRECON,VAR_EXECUTEsasRECON, LOG_SK);
+  
+    UPDATE  AR_EXECUTION_LOG SET EXECUTION_STATUS='COMPLETED' , RECON_END_DTE=SYSDATE WHERE LOG_SK=LOG_SK;
+    COMMIT;
+    
+    EXCEPTION
+		WHEN others THEN
+            UPDATE  AR_EXECUTION_LOG SET EXECUTION_STATUS='COMPLETED WITH ERROR' , RECON_END_DTE=SYSDATE ,EXECUTION_ERROR =SUBSTR(DBMS_UTILITY.FORMAT_ERROR_STACK, 1, 4000) WHERE LOG_SK=LOG_SK;
+    COMMIT; 
+
+END;
+/
+EXIT
